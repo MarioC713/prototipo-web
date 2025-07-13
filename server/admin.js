@@ -1,5 +1,5 @@
 // --- Configuración ---
-const API_URL = 'http://localhost:3000';
+const API_URL = '';
 let PRODUCTS = [];
 
 // --- Funciones de Utilidad ---

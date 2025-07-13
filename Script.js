@@ -6,7 +6,7 @@ async function loadProducts() {
     if (!container) return;
 
     try {
-        const response = await fetch('http://localhost:3000/api/public-products');
+        const response = await fetch('/api/public-products');
         if (!response.ok) throw new Error('No se pudieron cargar los productos.');
         
         const products = await response.json();
