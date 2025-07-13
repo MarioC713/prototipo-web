@@ -253,7 +253,14 @@ async function handleSendLicenses(e) {
             body: JSON.stringify(body),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.message);
+        if (!response.ok) {
+            // Si la respuesta de error contiene los créditos, actualizarlos
+            if (result.credits !== undefined) {
+                localStorage.setItem('userCredits', result.credits);
+                setupDashboardForRole(localStorage.getItem('userRole'));
+            }
+            throw new Error(result.message);
+        }
         
         addToLog(result.message, false);
         form.reset();
@@ -261,15 +268,43 @@ async function handleSendLicenses(e) {
         createProductSelector();
         fetchLicenseCounts();
         if (localStorage.getItem('userRole') === 'admin') fetchHistory();
+        
+        // Si la respuesta es exitosa y contiene créditos, actualizarlos.
+        // Si no, se podría hacer una llamada para obtener el estado actualizado del usuario.
         if (result.credits !== undefined) {
             localStorage.setItem('userCredits', result.credits);
             setupDashboardForRole(localStorage.getItem('userRole'));
+        } else if (localStorage.getItem('userRole') === 'seller') {
+            // Forzar una actualización del estado del usuario si no se devuelven créditos
+            // (útil para el caso de licencia única).
+            await refreshUserData();
         }
+
     } catch (error) {
         addToLog(error.message, true);
     } finally {
         submitButton.disabled = false;
         submitButton.innerHTML = `<i class="fas fa-check"></i> Enviar Licencia(s)`;
+    }
+}
+
+async function refreshUserData() {
+    try {
+        // Esta es una llamada ficticia. Necesitaríamos un endpoint que devuelva los datos del usuario actual.
+        // Por ahora, podemos simular el re-login para obtener los datos actualizados.
+        // O mejor, crear un endpoint específico para esto. Asumamos que no lo tenemos y hagamos un apaño.
+        // La mejor solución sería tener un endpoint GET /api/me o similar.
+        // Como no lo tenemos, vamos a "engañar" al sistema para que se actualice.
+        const usersResponse = await authenticatedFetch(`/users`);
+        const users = await usersResponse.json();
+        const currentUserId = JSON.parse(atob(localStorage.getItem('jwtToken').split('.')[1])).id;
+        const currentUser = users.find(u => u.id === currentUserId);
+        if (currentUser) {
+            localStorage.setItem('userCredits', currentUser.credits);
+            setupDashboardForRole(localStorage.getItem('userRole'));
+        }
+    } catch (error) {
+        addToLog('No se pudo refrescar los datos del usuario.', true);
     }
 }
 
