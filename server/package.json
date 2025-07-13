@@ -4,7 +4,8 @@
   "description": "Servidor para enviar licencias por correo.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "build": "node build.js",
+    "start": "node build.js && node server.js"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +21,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.1",
     "pg": "^8.12.0",
-    "bcrypt": "^5.1.1"
+    "bcrypt": "^5.1.1",
+    "javascript-obfuscator": "^4.1.0"
   }
 }
