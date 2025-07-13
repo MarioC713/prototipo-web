@@ -13,77 +13,90 @@ function initializeDatabase() {
                 return reject(err);
             }
             console.log('Conectado a la base de datos SQLite.');
-            db.serialize(() => {
-                // Tablas
-                db.run(`CREATE TABLE IF NOT EXISTS products (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT UNIQUE NOT NULL,
-                    description TEXT,
-                    price TEXT,
-                    image_url TEXT,
-                    features TEXT
-                )`);
-                db.run(`CREATE TABLE IF NOT EXISTS licenses (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    product_id INTEGER NOT NULL,
-                    key TEXT UNIQUE NOT NULL,
-                    is_used INTEGER DEFAULT 0,
-                    used_at TEXT,
-                    used_by_email TEXT,
-                    FOREIGN KEY (product_id) REFERENCES products(id)
-                )`);
-                db.run(`CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    credits INTEGER DEFAULT 0,
-                    hwid TEXT
-                )`);
-                db.run(`CREATE TABLE IF NOT EXISTS history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    date TEXT NOT NULL,
-                    email TEXT NOT NULL,
-                    product_name TEXT NOT NULL,
-                    license_key TEXT,
-                    is_multiple INTEGER DEFAULT 0,
-                    multiple_licenses_data TEXT,
-                    sender_id INTEGER,
-                    payment_method TEXT,
-                    status TEXT DEFAULT 'PENDING',
-                    FOREIGN KEY (sender_id) REFERENCES users(id)
-                )`);
-                db.run(`CREATE TABLE IF NOT EXISTS seller_permissions (
-                    user_id INTEGER NOT NULL,
-                    product_id INTEGER NOT NULL,
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
-                    PRIMARY KEY (user_id, product_id)
-                )`);
 
-                // Migraciones (se ejecutan de forma segura)
-                const migrations = [
-                    `ALTER TABLE history ADD COLUMN sender_id INTEGER`,
-                    `ALTER TABLE history ADD COLUMN payment_method TEXT`,
-                    `ALTER TABLE history ADD COLUMN status TEXT DEFAULT 'PENDING'`,
-                    `ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 0`,
-                    `ALTER TABLE users ADD COLUMN hwid TEXT`,
-                    `ALTER TABLE products ADD COLUMN description TEXT`,
-                    `ALTER TABLE products ADD COLUMN price TEXT`,
-                    `ALTER TABLE products ADD COLUMN image_url TEXT`,
-                    `ALTER TABLE products ADD COLUMN features TEXT`
-                ];
-                migrations.forEach(migration => {
-                    db.run(migration, (err) => {
-                        if (err && !err.message.includes('duplicate column name')) {
-                            console.error(`Error en migración: ${migration}`, err.message);
+            const run = (query) => new Promise((res, rej) => db.run(query, (err) => (err ? rej(err) : res())));
+
+            async function setup() {
+                try {
+                    await run(`CREATE TABLE IF NOT EXISTS products (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT UNIQUE NOT NULL,
+                        description TEXT,
+                        price TEXT,
+                        image_url TEXT,
+                        features TEXT
+                    )`);
+                    await run(`CREATE TABLE IF NOT EXISTS licenses (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        product_id INTEGER NOT NULL,
+                        key TEXT UNIQUE NOT NULL,
+                        is_used INTEGER DEFAULT 0,
+                        used_at TEXT,
+                        used_by_email TEXT,
+                        FOREIGN KEY (product_id) REFERENCES products(id)
+                    )`);
+                    await run(`CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username TEXT UNIQUE NOT NULL,
+                        password_hash TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        credits INTEGER DEFAULT 0,
+                        hwid TEXT
+                    )`);
+                    await run(`CREATE TABLE IF NOT EXISTS history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        date TEXT NOT NULL,
+                        email TEXT NOT NULL,
+                        product_name TEXT NOT NULL,
+                        license_key TEXT,
+                        is_multiple INTEGER DEFAULT 0,
+                        multiple_licenses_data TEXT,
+                        sender_id INTEGER,
+                        payment_method TEXT,
+                        status TEXT DEFAULT 'PENDING',
+                        FOREIGN KEY (sender_id) REFERENCES users(id)
+                    )`);
+                    await run(`CREATE TABLE IF NOT EXISTS seller_permissions (
+                        user_id INTEGER NOT NULL,
+                        product_id INTEGER NOT NULL,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+                        PRIMARY KEY (user_id, product_id)
+                    )`);
+
+                    console.log('Tablas creadas o ya existentes.');
+
+                    // Migraciones seguras
+                    const migrations = [
+                        `ALTER TABLE history ADD COLUMN sender_id INTEGER`,
+                        `ALTER TABLE history ADD COLUMN payment_method TEXT`,
+                        `ALTER TABLE history ADD COLUMN status TEXT DEFAULT 'PENDING'`,
+                        `ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 0`,
+                        `ALTER TABLE users ADD COLUMN hwid TEXT`,
+                        `ALTER TABLE products ADD COLUMN description TEXT`,
+                        `ALTER TABLE products ADD COLUMN price TEXT`,
+                        `ALTER TABLE products ADD COLUMN image_url TEXT`,
+                        `ALTER TABLE products ADD COLUMN features TEXT`
+                    ];
+
+                    for (const migration of migrations) {
+                        try {
+                            await run(migration);
+                        } catch (err) {
+                            if (!err.message.includes('duplicate column name')) {
+                                console.error(`Error en migración: ${migration}`, err.message);
+                            }
                         }
-                    });
-                });
+                    }
+                    
+                    resolve(db);
+                } catch (setupErr) {
+                    console.error('Error al configurar las tablas:', setupErr);
+                    reject(setupErr);
+                }
+            }
 
-                console.log('Tablas creadas o ya existentes.');
-                resolve(db);
-            });
+            setup();
         });
     });
 }
