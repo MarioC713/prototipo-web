@@ -123,7 +123,7 @@ app.post('/submit-purchase', upload.single('comprobante'), async (req, res) => {
                 { name: "Método de Pago", value: metodo, inline: true },
                 { name: "Correo Electrónico", value: `||${correo}||` }
             ],
-            footer: { text: `DEATH X Payments | Compra registrada en la DB` }
+            footer: { text: `Update V1 Payments | Compra registrada en la DB` }
         };
         formData.append('payload_json', JSON.stringify({ embeds: [embed] }));
         formData.append('file', comprobante.buffer, { filename: comprobante.originalname });
@@ -211,8 +211,8 @@ const emailTemplates = {
     'Paquete ESP Completo': { subject: 'Tu Licencia para Paquete ESP Completo', html: (license, product) => `<h1>Licencia para ${product}</h1><p>Tu clave es: <strong>${license}</strong></p>` },
     'Bypass APK': { subject: 'Tu Licencia para Bypass APK', html: (license, product) => `<h1>Licencia para ${product}</h1><p>Tu clave es: <strong>${license}</strong></p>` },
     'default': {
-        subject: (product) => `Tu Licencia para ${product} de DEATH X`,
-        html: (license, product) => `<h1>¡Gracias por tu compra!</h1><p>Aquí tienes tu clave de licencia para <strong>${product}</strong>:</p><h2 style="background: #f0f0f0; padding: 10px; display: inline-block;">${license}</h2><p>Gracias,<br>El equipo de DEATH X</p>`
+        subject: (product) => `Tu Licencia para ${product} de Update V1`,
+        html: (license, product) => `<h1>¡Gracias por tu compra!</h1><p>Aquí tienes tu clave de licencia para <strong>${product}</strong>:</p><h2 style="background: #f0f0f0; padding: 10px; display: inline-block;">${license}</h2><p>Gracias,<br>El equipo de Update V1</p>`
     }
 };
 
@@ -457,8 +457,20 @@ app.listen(PORT, async () => {
     }
     try {
         await initializeDatabase(PRODUCTS_LIST);
-        const admin = await getUserByUsername('admin');
-        if (!admin) await addUser('admin', process.env.ADMIN_PASSWORD || 'password', 'admin');
+        
+        const adminUsername = 'admin';
+        const adminPassword = process.env.ADMIN_PASSWORD || 'password';
+        const admin = await getUserByUsername(adminUsername);
+
+        if (admin) {
+            // Si el admin existe, nos aseguramos de que la contraseña sea la correcta
+            await updateUser(admin.id, admin.username, adminPassword, admin.role, admin.credits);
+            console.log('Contraseña de administrador sincronizada con éxito.');
+        } else {
+            // Si no existe, lo creamos
+            await addUser(adminUsername, adminPassword, 'admin');
+            console.log('Usuario administrador creado con éxito.');
+        }
     } catch (error) {
         console.error('Error al inicializar la base de datos:', error);
     }
