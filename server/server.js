@@ -432,6 +432,73 @@ app.post('/send-license', authenticateToken, async (req, res) => {
     }
 });
 
+app.post('/send-multiple-licenses', authenticateToken, async (req, res) => {
+    const { email, products } = req.body;
+    const db = getDb();
+    const senderId = req.user.id;
+    const client = await db.connect();
+
+    if (!Array.isArray(products) || products.length === 0) {
+        return res.status(400).json({ message: 'Se requiere una lista de productos.' });
+    }
+
+    try {
+        await client.query('BEGIN');
+
+        if (req.user.role !== 'admin') {
+            const creditsToDeduct = products.length;
+            const deducted = await deductCredits(senderId, creditsToDeduct);
+            if (deducted === 0) {
+                await client.query('ROLLBACK');
+                return res.status(403).json({ message: `Créditos insuficientes. Se requieren ${creditsToDeduct} créditos.` });
+            }
+        }
+
+        const sentLicenses = {};
+        for (const productName of products) {
+            const productRes = await client.query("SELECT id FROM products WHERE name = $1", [productName]);
+            if (productRes.rows.length === 0) {
+                throw new Error(`Producto no válido: ${productName}`);
+            }
+            const productRow = productRes.rows[0];
+
+            const licenseRes = await client.query("SELECT id, key FROM licenses WHERE product_id = $1 AND is_used = FALSE LIMIT 1 FOR UPDATE", [productRow.id]);
+            if (licenseRes.rows.length === 0) {
+                throw new Error(`No quedan licencias para ${productName}.`);
+            }
+            const licenseRow = licenseRes.rows[0];
+
+            await client.query("UPDATE licenses SET is_used = TRUE, used_at = NOW(), used_by_email = $1 WHERE id = $2", [email, licenseRow.id]);
+            sentLicenses[productName] = licenseRow.key;
+            
+            // Enviar correo por cada licencia
+            const template = getEmailTemplate(productName);
+            await sgMail.send({ to: email, from: fromEmail, subject: template.subject, html: template.html(licenseRow.key, productName) });
+        }
+
+        await client.query(
+            "INSERT INTO history (date, email, product_name, license_key, sender_id, status, is_multiple, multiple_licenses_data) VALUES (NOW(), $1, $2, $3, $4, 'APPROVED', TRUE, $5)",
+            [email, 'Múltiples Productos', null, senderId, JSON.stringify(sentLicenses)]
+        );
+        
+        const user = await getUserByUsername(req.user.username);
+
+        await client.query('COMMIT');
+
+        res.status(200).json({ 
+            message: `${products.length} licencias enviadas con éxito.`,
+            credits: user.credits // Devolver los créditos actualizados
+        });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error sending multiple licenses:', error);
+        res.status(500).json({ message: error.message || 'Error al enviar licencias.' });
+    } finally {
+        client.release();
+    }
+});
+
 app.get('/history', authenticateToken, async (req, res) => {
     const db = getDb();
     const { status } = req.query;
