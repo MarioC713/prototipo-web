@@ -9,7 +9,6 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const { 
     initializeDatabase, 
-    populateProducts, 
     getDb, 
     addUser, 
     updateUser, 
@@ -457,8 +456,7 @@ app.listen(PORT, async () => {
         console.warn('ADVERTENCIA: Faltan variables de entorno críticas.');
     }
     try {
-        await initializeDatabase();
-        await populateProducts(PRODUCTS_LIST);
+        await initializeDatabase(PRODUCTS_LIST);
         const admin = await getUserByUsername('admin');
         if (!admin) await addUser('admin', process.env.ADMIN_PASSWORD || 'password', 'admin');
     } catch (error) {

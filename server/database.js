@@ -5,7 +5,7 @@ const bcrypt = require('bcrypt');
 const DB_PATH = path.join(__dirname, 'database.sqlite');
 let db;
 
-function initializeDatabase() {
+function initializeDatabase(productsList = []) {
     return new Promise((resolve, reject) => {
         db = new sqlite3.Database(DB_PATH, (err) => {
             if (err) {
@@ -14,7 +14,8 @@ function initializeDatabase() {
             }
             console.log('Conectado a la base de datos SQLite.');
 
-            const run = (query) => new Promise((res, rej) => db.run(query, (err) => (err ? rej(err) : res())));
+            const run = (query, params = []) => new Promise((res, rej) => db.run(query, params, function(err) { if (err) rej(err); else res(this); }));
+            const get = (query, params = []) => new Promise((res, rej) => db.get(query, params, (err, row) => (err ? rej(err) : res(row))));
 
             async function setup() {
                 try {
@@ -66,6 +67,16 @@ function initializeDatabase() {
 
                     console.log('Tablas creadas o ya existentes.');
 
+                    // Populate products if table is empty
+                    const productCount = await get("SELECT COUNT(*) AS count FROM products");
+                    if (productCount.count === 0 && productsList.length > 0) {
+                        console.log('Populando la tabla de productos...');
+                        const stmt = db.prepare("INSERT INTO products (name) VALUES (?)");
+                        productsList.forEach(product => stmt.run(product));
+                        await new Promise((res, rej) => stmt.finalize(err => err ? rej(err) : res()));
+                        console.log('Tabla de productos populada.');
+                    }
+
                     // Migraciones seguras
                     const migrations = [
                         `ALTER TABLE history ADD COLUMN sender_id INTEGER`,
@@ -97,21 +108,6 @@ function initializeDatabase() {
             }
 
             setup();
-        });
-    });
-}
-
-async function populateProducts(productsList) {
-    return new Promise((resolve, reject) => {
-        db.get("SELECT COUNT(*) AS count FROM products", (err, row) => {
-            if (err) return reject(err);
-            if (row.count === 0) {
-                const stmt = db.prepare("INSERT INTO products (name) VALUES (?)");
-                productsList.forEach(product => stmt.run(product));
-                stmt.finalize(resolve);
-            } else {
-                resolve();
-            }
         });
     });
 }
@@ -285,7 +281,6 @@ async function resetUserHwid(userId) {
 
 module.exports = {
     initializeDatabase,
-    populateProducts,
     getDb: () => db,
     addUser,
     updateUser,
