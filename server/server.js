@@ -50,16 +50,14 @@ app.use(express.static(publicPath));
 app.use('/admin', express.static(path.resolve(__dirname)));
 
 // Ruta pública para obtener todos los productos
-app.get('/api/public-products', (req, res) => {
+app.get('/api/public-products', async (req, res) => {
     const db = getDb();
-    // Corregido: Seleccionar todos los campos para la vista pública
-    db.all("SELECT * FROM products ORDER BY id", [], (err, rows) => {
-        if (err) {
-            res.status(500).json({ message: 'Error al obtener los productos.' });
-            return;
-        }
+    try {
+        const { rows } = await db.query("SELECT * FROM products ORDER BY id");
         res.json(rows);
-    });
+    } catch (err) {
+        res.status(500).json({ message: 'Error al obtener los productos.' });
+    }
 });
 
 app.post('/login', async (req, res) => {
@@ -78,7 +76,6 @@ app.post('/login', async (req, res) => {
             return res.status(401).json({ message: 'Usuario o contraseña incorrectos.' });
         }
 
-        // Lógica de HWID solo para vendedores
         if (user.role === 'seller') {
             if (!hwid) {
                 return res.status(400).json({ message: 'No se pudo obtener el identificador del equipo.' });
@@ -87,9 +84,8 @@ app.post('/login', async (req, res) => {
                 return res.status(403).json({ message: 'Esta cuenta está vinculada a otro equipo.' });
             }
             if (!user.hwid) {
-                // Vincular HWID si es el primer inicio de sesión
                 const db = getDb();
-                db.run("UPDATE users SET hwid = ? WHERE id = ?", [hwid, user.id]);
+                await db.query("UPDATE users SET hwid = $1 WHERE id = $2", [hwid, user.id]);
             }
         }
 
@@ -97,6 +93,7 @@ app.post('/login', async (req, res) => {
         res.json({ role: user.role, token, credits: user.credits });
 
     } catch (error) {
+        console.error("Login error:", error);
         res.status(500).json({ message: 'Error interno del servidor.' });
     }
 });
@@ -129,24 +126,17 @@ app.post('/submit-purchase', upload.single('comprobante'), async (req, res) => {
         formData.append('payload_json', JSON.stringify({ embeds: [embed] }));
         formData.append('file', comprobante.buffer, { filename: comprobante.originalname });
         
-        // Envía el webhook a Discord y espera la respuesta
         const discordResponse = await axios.post(DISCORD_WEBHOOK_URL, formData, { 
             headers: formData.getHeaders() 
         });
 
-        // Verifica si Discord respondió con un error
         if (discordResponse.status < 200 || discordResponse.status >= 300) {
-            // Si hay un error, lo lanza para ser capturado por el bloque catch
             throw new Error(`Error from Discord: ${discordResponse.statusText}`);
         }
 
-        // Si todo fue bien, envía la respuesta de éxito al cliente
         res.status(200).json({ message: 'Comprobante enviado y registrado con éxito.' });
     } catch (error) {
-        // Loguea el error detallado en la consola del servidor para depuración
         console.error('Error detallado al procesar la compra:', error);
-        
-        // Envía una respuesta de error genérica al cliente
         res.status(500).json({ message: 'Error al procesar la solicitud. Por favor, contacta al soporte.' });
     }
 });
@@ -154,19 +144,19 @@ app.post('/submit-purchase', upload.single('comprobante'), async (req, res) => {
 const productRouter = express.Router();
 productRouter.use(authenticateToken, authorizeAdmin);
 
-// Ruta para obtener todos los detalles de un producto específico
-productRouter.get('/:id', (req, res) => {
+productRouter.get('/:id', async (req, res) => {
     const { id } = req.params;
     const db = getDb();
-    db.get("SELECT * FROM products WHERE id = ?", [id], (err, row) => {
-        if (err) {
-            return res.status(500).json({ message: 'Error al obtener el producto.' });
-        }
-        if (!row) {
+    try {
+        const { rows } = await db.query("SELECT * FROM products WHERE id = $1", [id]);
+        if (rows.length === 0) {
             return res.status(404).json({ message: 'Producto no encontrado.' });
         }
-        res.json(row);
-    });
+        res.json(rows[0]);
+    } catch (error) {
+        console.error(`Error fetching product ${id}:`, error);
+        res.status(500).json({ message: 'Error al obtener el producto.' });
+    }
 });
 
 productRouter.post('/', async (req, res) => {
@@ -220,7 +210,7 @@ const emailTemplates = {
 const getEmailTemplate = (productName) => {
     return emailTemplates[productName] || {
         subject: emailTemplates.default.subject(productName),
-        html: (license) => emailTemplates.default.html(license, productName)
+        html: (license, product) => emailTemplates.default.html(license, product)
     };
 };
 
@@ -228,36 +218,41 @@ app.post('/approve-purchase/:id', authenticateToken, authorizeAdmin, async (req,
     const { id } = req.params;
     const db = getDb();
     const senderId = req.user.id;
-    const dbRun = (query, params) => new Promise((resolve, reject) => db.run(query, params, (err) => err ? reject(err) : resolve(true)));
+    const client = await db.connect();
 
     try {
-        await dbRun("BEGIN TRANSACTION");
+        await client.query('BEGIN');
         const purchase = await getPurchaseById(id);
         if (!purchase || purchase.status !== 'PENDING') {
-            await dbRun("ROLLBACK");
+            await client.query('ROLLBACK');
             return res.status(404).json({ message: 'Compra no encontrada o ya procesada.' });
         }
-        const productRow = await new Promise((resolve, reject) => db.get("SELECT id FROM products WHERE name = ?", [purchase.product_name], (err, row) => err ? reject(err) : resolve(row)));
-        if (!productRow) {
-            await dbRun("ROLLBACK");
+        const productRes = await client.query("SELECT id FROM products WHERE name = $1", [purchase.product_name]);
+        if (productRes.rows.length === 0) {
+            await client.query('ROLLBACK');
             return res.status(400).json({ message: `El producto "${purchase.product_name}" no existe.` });
         }
-        const licenseRow = await new Promise((resolve, reject) => db.get("SELECT id, key FROM licenses WHERE product_id = ? AND is_used = 0 LIMIT 1", [productRow.id], (err, row) => err ? reject(err) : resolve(row)));
-        if (!licenseRow) {
-            await dbRun("ROLLBACK");
+        const productRow = productRes.rows[0];
+        const licenseRes = await client.query("SELECT id, key FROM licenses WHERE product_id = $1 AND is_used = FALSE LIMIT 1 FOR UPDATE", [productRow.id]);
+        if (licenseRes.rows.length === 0) {
+            await client.query('ROLLBACK');
             return res.status(400).json({ message: `No quedan licencias para ${purchase.product_name}.` });
         }
-        await dbRun("UPDATE licenses SET is_used = 1, used_at = ?, used_by_email = ? WHERE id = ?", [new Date().toISOString(), purchase.email, licenseRow.id]);
+        const licenseRow = licenseRes.rows[0];
+        await client.query("UPDATE licenses SET is_used = TRUE, used_at = NOW(), used_by_email = $1 WHERE id = $2", [purchase.email, licenseRow.id]);
         await updatePurchaseStatus(id, 'APPROVED', licenseRow.key, senderId);
-        await dbRun("COMMIT");
+        await client.query('COMMIT');
 
         const template = getEmailTemplate(purchase.product_name);
-        await sgMail.send({ to: purchase.email, from: fromEmail, subject: template.subject, html: template.html(licenseRow.key) });
+        await sgMail.send({ to: purchase.email, from: fromEmail, subject: template.subject, html: template.html(licenseRow.key, purchase.product_name) });
         
         res.status(200).json({ message: `Compra ${id} aprobada. Licencia enviada.` });
     } catch (error) {
-        await dbRun("ROLLBACK").catch(console.error);
+        await client.query('ROLLBACK');
+        console.error("Error approving purchase:", error);
         res.status(500).json({ message: 'Error interno del servidor.' });
+    } finally {
+        client.release();
     }
 });
 
@@ -268,10 +263,7 @@ app.post('/reject-purchase/:id', authenticateToken, authorizeAdmin, async (req, 
         if (!purchase || purchase.status !== 'PENDING') {
             return res.status(404).json({ message: 'Compra no encontrada o ya procesada.' });
         }
-        const { changes } = await updatePurchaseStatus(id, 'REJECTED');
-        if (changes === 0) {
-            return res.status(404).json({ message: 'No se pudo actualizar la compra.' });
-        }
+        await updatePurchaseStatus(id, 'REJECTED');
         res.status(200).json({ message: `Compra ${id} rechazada.` });
     } catch (error) {
         res.status(500).json({ message: 'Error interno del servidor.' });
@@ -305,96 +297,132 @@ function authorizeAdmin(req, res, next) {
 
 app.get('/products', authenticateToken, async (req, res) => {
     const db = getDb();
-    const baseQuery = "SELECT * FROM products ORDER BY id";
-    if (req.user.role === 'admin') {
-        db.all(baseQuery, [], (err, rows) => {
-            if (err) return res.status(500).json({ message: 'Error al obtener productos.' });
+    try {
+        if (req.user.role === 'admin') {
+            const { rows } = await db.query("SELECT * FROM products ORDER BY id");
             res.json(rows);
-        });
-    } else {
-        try {
+        } else {
             const allowedProductIds = await getSellerPermissions(req.user.id);
-            if (allowedProductIds.length === 0) return res.json([]);
-            const placeholders = allowedProductIds.map(() => '?').join(',');
-            db.all(`SELECT * FROM products WHERE id IN (${placeholders}) ORDER BY id`, allowedProductIds, (err, rows) => {
-                if (err) return res.status(500).json({ message: 'Error al obtener productos.' });
-                res.json(rows);
-            });
-        } catch (error) {
-            res.status(500).json({ message: 'Error al obtener permisos de productos.' });
+            if (allowedProductIds.length === 0) {
+                return res.json([]);
+            }
+            const placeholders = allowedProductIds.map((_, i) => `$${i + 1}`).join(',');
+            const { rows } = await db.query(`SELECT * FROM products WHERE id IN (${placeholders}) ORDER BY id`, allowedProductIds);
+            res.json(rows);
         }
+    } catch (error) {
+        console.error('Error fetching products:', error);
+        res.status(500).json({ message: 'Error al obtener productos.' });
     }
 });
 
-app.get('/licenses-all', authenticateToken, (req, res) => {
+app.get('/licenses-all', authenticateToken, async (req, res) => {
     const db = getDb();
-    db.all(`SELECT p.name, COUNT(l.id) AS count FROM products p LEFT JOIN licenses l ON p.id = l.product_id AND l.is_used = 0 GROUP BY p.name`, [], (err, rows) => {
+    try {
+        const { rows } = await db.query(`SELECT p.name, COUNT(l.id) AS count FROM products p LEFT JOIN licenses l ON p.id = l.product_id AND l.is_used = FALSE GROUP BY p.name`);
         const counts = {};
-        rows.forEach(row => { counts[row.name] = row.count; });
+        rows.forEach(row => {
+            counts[row.name] = parseInt(row.count, 10);
+        });
         res.json(counts);
-    });
+    } catch (error) {
+        console.error('Error fetching license counts:', error);
+        res.status(500).json({ message: 'Error al obtener el inventario de licencias.' });
+    }
 });
 
 app.post('/send-license', authenticateToken, async (req, res) => {
     const { email, product } = req.body;
     const db = getDb();
     const senderId = req.user.id;
+    const client = await db.connect();
 
     try {
-        const productRow = await new Promise((resolve, reject) => db.get("SELECT id FROM products WHERE name = ?", [product], (err, row) => err ? reject(err) : resolve(row)));
-        if (!productRow) return res.status(400).json({ message: 'Producto no válido.' });
+        await client.query('BEGIN');
 
-        const licenseRow = await new Promise((resolve, reject) => db.get("SELECT id, key FROM licenses WHERE product_id = ? AND is_used = 0 LIMIT 1", [productRow.id], (err, row) => err ? reject(err) : resolve(row)));
-        if (!licenseRow) return res.status(400).json({ message: `No quedan licencias para ${product}.` });
+        const productRes = await client.query("SELECT id FROM products WHERE name = $1", [product]);
+        if (productRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: 'Producto no válido.' });
+        }
+        const productRow = productRes.rows[0];
 
-        await new Promise((resolve, reject) => db.run("UPDATE licenses SET is_used = 1, used_at = ?, used_by_email = ? WHERE id = ?", [new Date().toISOString(), email, licenseRow.id], (err) => err ? reject(err) : resolve()));
-        await new Promise((resolve, reject) => db.run("INSERT INTO history (date, email, product_name, license_key, sender_id) VALUES (?, ?, ?, ?, ?)", [new Date().toISOString(), email, product, licenseRow.key, senderId], (err) => err ? reject(err) : resolve()));
+        const licenseRes = await client.query("SELECT id, key FROM licenses WHERE product_id = $1 AND is_used = FALSE LIMIT 1 FOR UPDATE", [productRow.id]);
+        if (licenseRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ message: `No quedan licencias para ${product}.` });
+        }
+        const licenseRow = licenseRes.rows[0];
+
+        await client.query("UPDATE licenses SET is_used = TRUE, used_at = NOW(), used_by_email = $1 WHERE id = $2", [email, licenseRow.id]);
+        await client.query("INSERT INTO history (date, email, product_name, license_key, sender_id, status) VALUES (NOW(), $1, $2, $3, $4, 'APPROVED')", [email, product, licenseRow.key, senderId]);
+
+        await client.query('COMMIT');
 
         const template = getEmailTemplate(product);
-        await sgMail.send({ to: email, from: fromEmail, subject: template.subject, html: template.html(licenseRow.key) });
+        await sgMail.send({ to: email, from: fromEmail, subject: template.subject, html: template.html(licenseRow.key, product) });
 
         res.status(200).json({ message: `Licencia para ${product} enviada.` });
     } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error sending license:', error);
         res.status(500).json({ message: 'Error al enviar licencia.' });
+    } finally {
+        client.release();
     }
 });
 
-app.get('/history', authenticateToken, (req, res) => {
+app.get('/history', authenticateToken, async (req, res) => {
     const db = getDb();
     const { status } = req.query;
-    let query = `SELECT h.*, u.username as sender_name FROM history h LEFT JOIN users u ON h.sender_id = u.id`;
+    let baseQuery = `SELECT h.*, u.username as sender_name FROM history h LEFT JOIN users u ON h.sender_id = u.id`;
     const params = [];
     if (status) {
-        query += ' WHERE h.status = ?';
+        baseQuery += ' WHERE h.status = $1';
         params.push(status);
     }
-    query += ' ORDER BY h.date DESC';
-    db.all(query, params, (err, rows) => {
-        if (err) return res.status(500).json({ message: 'Error al obtener historial.' });
+    baseQuery += ' ORDER BY h.date DESC';
+    try {
+        const { rows } = await db.query(baseQuery, params);
         res.json(rows.map(row => ({...row, multiple_licenses_data: row.multiple_licenses_data ? JSON.parse(row.multiple_licenses_data) : {}})));
-    });
+    } catch (error) {
+        console.error('Error fetching history:', error);
+        res.status(500).json({ message: 'Error al obtener historial.' });
+    }
 });
 
 app.post('/add-licenses', authenticateToken, authorizeAdmin, async (req, res) => {
     const { product, licenses } = req.body;
     const db = getDb();
     try {
-        const productRow = await new Promise((resolve, reject) => db.get("SELECT id FROM products WHERE name = ?", [product], (err, row) => err ? reject(err) : resolve(row)));
-        if (!productRow) return res.status(400).json({ message: 'Producto no válido.' });
+        const productRes = await db.query("SELECT id FROM products WHERE name = $1", [product]);
+        if (productRes.rows.length === 0) {
+            return res.status(400).json({ message: 'Producto no válido.' });
+        }
+        const productRow = productRes.rows[0];
         const newLicenses = licenses.split('\n').map(l => l.trim()).filter(Boolean);
-        if (newLicenses.length === 0) return res.status(400).json({ message: 'No se proporcionaron licencias.' });
-        const stmt = db.prepare("INSERT OR IGNORE INTO licenses (product_id, key) VALUES (?, ?)");
-        newLicenses.forEach(key => stmt.run(productRow.id, key));
-        stmt.finalize();
+        if (newLicenses.length === 0) {
+            return res.status(400).json({ message: 'No se proporcionaron licencias.' });
+        }
+        
+        for (const key of newLicenses) {
+            await db.query("INSERT INTO licenses (product_id, key) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING", [productRow.id, key]);
+        }
+        
         res.status(200).json({ message: `${newLicenses.length} licencias añadidas.` });
     } catch (error) {
+        console.error("Error adding licenses:", error);
         res.status(500).json({ message: 'Error al añadir licencias.' });
     }
 });
 
 app.get('/users', authenticateToken, authorizeAdmin, async (req, res) => {
-    const users = await getUsers();
-    res.json(users.map(({ password_hash, ...user }) => user));
+    try {
+        const users = await getUsers();
+        res.json(users.map(({ password_hash, ...user }) => user));
+    } catch(e) {
+        res.status(500).json({ message: 'Error al obtener usuarios.' });
+    }
 });
 
 app.post('/users', authenticateToken, authorizeAdmin, async (req, res) => {
@@ -444,8 +472,12 @@ app.post('/users/:id/reset-hwid', authenticateToken, authorizeAdmin, async (req,
 });
 
 app.get('/users/:id/permissions', authenticateToken, authorizeAdmin, async (req, res) => {
-    const permissions = await getSellerPermissions(req.params.id);
-    res.json(permissions);
+    try {
+        const permissions = await getSellerPermissions(req.params.id);
+        res.json(permissions);
+    } catch(e) {
+        res.status(500).json({ message: 'Error al obtener permisos.' });
+    }
 });
 
 app.listen(PORT, async () => {
@@ -464,15 +496,13 @@ app.listen(PORT, async () => {
         const admin = await getUserByUsername(adminUsername);
 
         if (admin) {
-            // Si el admin existe, nos aseguramos de que la contraseña sea la correcta
             await updateUser(admin.id, admin.username, adminPassword, admin.role, admin.credits);
             console.log('Contraseña de administrador sincronizada con éxito.');
         } else {
-            // Si no existe, lo creamos
             await addUser(adminUsername, adminPassword, 'admin');
             console.log('Usuario administrador creado con éxito.');
         }
     } catch (error) {
-        console.error('Error al inicializar la base de datos:', error);
+        console.error('Error al inicializar la aplicación:', error);
     }
 });
