@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="text-align:center;">
                         <b>Escanea para pagar con Yape:</b><br>
                         <img src="https://files.catbox.moe/e8r8mc.png" alt="QR Yape" style="width:150px; margin:10px auto; display:block; border-radius:8px;">
-                        <p style="font-size:0.9rem;">Titular: Juan Pérez<br>Celular: 999 888 777</p>
+                        <p style="font-size:0.9rem;">Titular: Mario<br>Celular: 999 888 777</p>
                     </div>`;
                 break;
             case "paypal":
@@ -202,7 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="text-align:center;">
                         <b>Datos para transferencia bancaria:</b><br>
                         <p style="font-size:1.1rem; color:var(--accent-primary); margin-top: 5px;">123-45678901-23</p>
-                        <p style="font-size:0.9rem;">Banco: Banco Digital<br>Titular: Juan Pérez</p>
+                        <p style="font-size:0.9rem;">Banco: Banco Digital<br>Titular: Mario</p>
                     </div>`;
                 break;
         }
