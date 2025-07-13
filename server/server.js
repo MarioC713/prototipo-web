@@ -311,10 +311,19 @@ function authenticateToken(req, res, next) {
     }
 
     if (token == null) {
+        // Si la solicitud es para una página HTML, redirigir al login
+        if (req.headers.accept && req.headers.accept.includes('text/html')) {
+            return res.redirect('/');
+        }
+        // Si es una llamada de API, devolver JSON
         return res.status(401).json({ message: 'Token no proporcionado. Acceso no autorizado.' });
     }
     jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) {
+            // Si el token es inválido y la solicitud es para una página HTML, redirigir al login
+            if (req.headers.accept && req.headers.accept.includes('text/html')) {
+                return res.redirect('/');
+            }
             return res.status(403).json({ message: 'Token inválido o expirado. Acceso prohibido.' });
         }
         req.user = user;
