@@ -1,11 +1,20 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const bcrypt = require('bcrypt');
+const fs = require('fs');
 
 // La ruta de la DB ahora es configurable. Usará la variable de entorno en producción
 // y un archivo local para el desarrollo.
 const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'database.sqlite');
-console.log(`[DEBUG] Database path determined: ${DB_PATH}`); // Añadido para depuración
+
+// Asegurarse de que el directorio de la base de datos exista
+const dbDirectory = path.dirname(DB_PATH);
+if (!fs.existsSync(dbDirectory)) {
+    fs.mkdirSync(dbDirectory, { recursive: true });
+    console.log(`[INFO] Directorio de la base de datos creado en: ${dbDirectory}`);
+}
+
+console.log(`[DEBUG] Database path determined: ${DB_PATH}`);
 let db;
 
 function initializeDatabase(productsList = []) {
