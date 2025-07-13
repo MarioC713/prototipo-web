@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - DEATH X</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+    <div id="password-prompt">
+        <div class="card">
+            <h2><i class="fas fa-lock"></i> Acceso al Panel</h2>
+            <p>Por favor, ingrese sus credenciales para continuar.</p>
+            <div class="input-group">
+                <i class="fas fa-user"></i>
+                <input type="text" id="username" placeholder="Usuario"> <!-- Corregido: type="text" -->
+            </div>
+            <div class="input-group">
+                <i class="fas fa-key"></i>
+                <input type="password" id="password" placeholder="Contraseña">
+            </div>
+            <button id="login-btn">Entrar</button>
+        </div>
+    </div>
+
+    <div id="main-content" class="dashboard-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-shield-halved"></i>
+                <span>DEATH X</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="#dashboard" class="nav-link active" data-tab="dashboard"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                <a href="#stock" class="nav-link" data-tab="stock"><i class="fas fa-boxes-stacked"></i> Gestión de Stock</a>
+                <a href="#pending-purchases" class="nav-link" data-tab="pending-purchases"><i class="fas fa-inbox"></i> Revisión de Pedidos</a>
+                <a href="#history" class="nav-link" data-tab="history"><i class="fas fa-history"></i> Historial</a>
+                <a href="#users" class="nav-link" data-tab="users"><i class="fas fa-users"></i> Gestión de Usuarios</a>
+                <a href="#manage-products" class="nav-link" data-tab="manage-products"><i class="fas fa-cogs"></i> Gestionar Productos</a>
+            </nav>
+            <div class="sidebar-footer">
+                <p>&copy; 2025 DEATH X</p>
+            </div>
+        </aside>
+
+        <main class="main-panel">
+            <header class="main-header">
+                <h1 id="panel-title">Dashboard</h1>
+                <div class="user-info">
+                    <span id="current-username">Admin</span> <!-- Añadir ID para mostrar el nombre de usuario -->
+                    <i class="fas fa-user-circle"></i>
+                    <button id="logout-btn" class="logout-btn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
+                </div>
+            </header>
+
+            <!-- Panel del Dashboard -->
+            <div id="dashboard-panel" class="tab-panel active">
+                <div class="stats-grid" id="license-stats-container">
+                    <!-- Las tarjetas de estadísticas de licencias se cargarán aquí -->
+                </div>
+                <div class="main-content-grid">
+                    <div class="card form-card">
+                        <h2 class="card-title"><i class="fas fa-paper-plane"></i> Enviar Nueva(s) Licencia(s)</h2>
+                        <form id="send-license-form">
+                            <div class="form-group">
+                                <label for="email">Correo del Cliente:</label>
+                                <div class="input-group">
+                                    <i class="fas fa-envelope"></i>
+                                    <input type="email" id="email" required placeholder="cliente@email.com">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="product-container">Productos:</label>
+                                <div id="product-container"></div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" id="add-product-btn"><i class="fas fa-plus"></i> Añadir Producto</button>
+                                <button type="submit" class="submit-btn"><i class="fas fa-check"></i> Enviar Licencia(s)</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="card log-card">
+                        <h2 class="card-title"><i class="fas fa-file-alt"></i> Registro de Actividad</h2>
+                        <div id="log"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de Gestión de Stock -->
+            <div id="stock-panel" class="tab-panel">
+                <div class="card full-width-grid">
+                    <h2 class="card-title"><i class="fas fa-boxes-stacked"></i> Añadir Nuevas Licencias al Stock</h2>
+                    <form id="add-stock-form">
+                        <div class="form-group">
+                            <label for="stock-product-select">Seleccione el Producto:</label>
+                            <select id="stock-product-select" required></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="licenses-textarea">Nuevas Licencias (una por línea):</label>
+                            <textarea id="licenses-textarea" rows="10" placeholder="LICENCIA-ABC-123\nLICENCIA-DEF-456\n..."></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="submit-btn"><i class="fas fa-plus-circle"></i> Añadir al Stock</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Panel de Revisión de Pedidos -->
+            <div id="pending-purchases-panel" class="tab-panel">
+                <div class="card full-width-grid">
+                    <h2 class="card-title"><i class="fas fa-inbox"></i> Pedidos de la Web para Revisar</h2>
+                    <div class="table-container">
+                        <table id="pending-purchases-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Email</th>
+                                    <th>Producto</th>
+                                    <th>Método de Pago</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pending-purchases-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel del Historial -->
+            <div id="history-panel" class="tab-panel">
+                <div class="card full-width-grid">
+                    <h2 class="card-title"><i class="fas fa-history"></i> Historial de Licencias Enviadas</h2>
+                    <div class="table-container">
+                        <table id="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha y Hora</th>
+                                    <th>Correo</th>
+                                    <th>Producto(s)</th>
+                                    <th>Licencia(s)</th>
+                                    <th>Vendedor</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de Gestión de Usuarios -->
+            <div id="users-panel" class="tab-panel" style="display: none;">
+                <div class="card full-width-grid">
+                    <h2 class="card-title"><i class="fas fa-user-plus"></i> Añadir Nuevo Usuario</h2>
+                    <form id="add-user-form">
+                        <div class="form-group">
+                            <label for="new-username">Nombre de Usuario:</label>
+                            <div class="input-group">
+                                <i class="fas fa-user"></i>
+                                <input type="text" id="new-username" required placeholder="nombredeusuario">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="new-password">Contraseña:</label>
+                            <div class="input-group">
+                                <i class="fas fa-lock"></i>
+                                <input type="password" id="new-password" required placeholder="contraseña">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="new-role">Rol:</label>
+                            <select id="new-role" class="form-control" required>
+                                <option value="admin">Administrador</option>
+                                <option value="seller">Vendedor</option>
+                            </select>
+                        </div>
+                        <div id="new-user-permissions-container" class="form-group" style="display: none;">
+                            <label>Productos Permitidos:</label>
+                            <div id="new-user-product-list" class="permissions-grid"></div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="submit-btn"><i class="fas fa-plus-circle"></i> Crear Usuario</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card full-width-grid mt-4">
+                    <h2 class="card-title"><i class="fas fa-users"></i> Usuarios Existentes</h2>
+                    <div class="table-container">
+                        <table id="users-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Usuario</th>
+                                    <th>Rol</th>
+                                    <th>Créditos</th>
+                                    <th>HWID</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de Gestión de Productos -->
+            <div id="manage-products-panel" class="tab-panel">
+                <div class="manage-products-grid">
+                    <div class="card">
+                        <h2 class="card-title"><i class="fas fa-plus-circle"></i> Añadir Producto</h2>
+                        <form id="add-product-form">
+                            <div class="form-group">
+                                <label for="new-product-name">Nombre del Producto</label>
+                                <input type="text" id="new-product-name" required placeholder="Ej: Aimbot Premium">
+                            </div>
+                            <div class="form-group">
+                                <label for="new-product-description">Descripción</label>
+                                <textarea id="new-product-description" placeholder="Breve descripción del producto"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="new-product-price">Precio</label>
+                                <input type="text" id="new-product-price" placeholder="Ej: $20/mes">
+                            </div>
+                            <div class="form-group">
+                                <label for="new-product-image">URL de la Imagen</label>
+                                <input type="text" id="new-product-image" placeholder="https://ejemplo.com/imagen.png">
+                            </div>
+                            <div class="form-group">
+                                <label for="new-product-features">Características (una por línea)</label>
+                                <textarea id="new-product-features" placeholder="Característica 1\nCaracterística 2"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="submit-btn" style="width: 100%;">Añadir Producto</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="card">
+                        <h2 class="card-title"><i class="fas fa-list-alt"></i> Productos Existentes</h2>
+                        <div class="table-container">
+                            <table id="products-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nombre</th>
+                                        <th>Precio</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="products-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal de Edición de Usuario -->
+            <div id="edit-user-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                        <span class="close-button">&times;</span>
+                        <h2 class="card-title"><i class="fas fa-user-edit"></i> Editar Usuario</h2>
+                        <form id="edit-user-form">
+                            <input type="hidden" id="edit-user-id">
+                            <div class="form-group">
+                                <label for="edit-username">Nombre de Usuario:</label>
+                                <div class="input-group">
+                                    <i class="fas fa-user"></i>
+                                    <input type="text" id="edit-username" required>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-password">Nueva Contraseña (dejar en blanco para no cambiar):</label>
+                                <div class="input-group">
+                                    <i class="fas fa-lock"></i>
+                                    <input type="password" id="edit-password">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-role">Rol:</label>
+                                <select id="edit-role" class="form-control" required>
+                                    <option value="admin">Administrador</option>
+                                    <option value="seller">Vendedor</option>
+                                </select>
+                            </div>
+                            <div id="edit-user-permissions-container" class="form-group" style="display: none;">
+                                <label>Productos Permitidos:</label>
+                                <div id="edit-user-product-list" class="permissions-grid"></div>
+                            </div>
+                            <div class="form-group">
+                                <label for="edit-credits">Créditos:</label>
+                                <div class="input-group">
+                                    <i class="fas fa-coins"></i>
+                                    <input type="number" id="edit-credits" required min="0">
+                                </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="submit-btn"><i class="fas fa-save"></i> Guardar Cambios</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal de Edición de Producto -->
+            <div id="edit-product-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <span class="close-button">&times;</span>
+                    <h2 class="card-title"><i class="fas fa-edit"></i> Editar Producto</h2>
+                    <form id="edit-product-form">
+                        <input type="hidden" id="edit-product-id">
+                        <div class="form-group">
+                            <label for="edit-product-name">Nombre del Producto</label>
+                            <input type="text" id="edit-product-name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-product-description">Descripción</label>
+                            <textarea id="edit-product-description"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-product-price">Precio</label>
+                            <input type="text" id="edit-product-price">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-product-image">URL de la Imagen</label>
+                            <input type="text" id="edit-product-image">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-product-features">Características (una por línea)</label>
+                            <textarea id="edit-product-features"></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="submit-btn"><i class="fas fa-save"></i> Guardar Cambios</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
