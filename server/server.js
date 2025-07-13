@@ -8,6 +8,7 @@ const sgMail = require('@sendgrid/mail');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const cookieParser = require('cookie-parser');
 const { 
     initializeDatabase, 
     getDb, 
@@ -23,7 +24,8 @@ const {
     addPurchaseToHistory,
     getPurchaseById,
     updatePurchaseStatus,
-    resetUserHwid
+    resetUserHwid,
+    deductCredits
 } = require('./database');
 const multer = require('multer');
 const axios = require('axios');
@@ -41,13 +43,32 @@ let fromEmail;
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Servir archivos estáticos desde el directorio raíz del proyecto (un nivel arriba de 'server')
 const publicPath = path.resolve(__dirname, '..');
 app.use(express.static(publicPath));
 
 // Servir archivos específicos del panel de admin desde la carpeta 'server'
-app.use('/admin', express.static(path.resolve(__dirname)));
+// app.use('/admin', express.static(path.resolve(__dirname))); // Eliminado por seguridad
+
+// Proteger rutas de administrador
+const adminRouter = express.Router();
+adminRouter.use(authenticateToken, authorizeAdmin);
+
+adminRouter.get('/', (req, res) => {
+    res.sendFile(path.resolve(__dirname, 'admin.html'));
+});
+
+adminRouter.get('/admin.css', (req, res) => {
+    res.sendFile(path.resolve(__dirname, 'admin.css'));
+});
+
+adminRouter.get('/admin.js', (req, res) => {
+    res.sendFile(path.resolve(__dirname, 'admin.js'));
+});
+
+app.use('/admin', adminRouter);
 
 // Ruta pública para obtener todos los productos
 app.get('/api/public-products', async (req, res) => {
@@ -90,6 +111,16 @@ app.post('/login', async (req, res) => {
         }
 
         const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
+        
+        if (user.role === 'admin') {
+            res.cookie('token', token, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production', // Usar 'secure' en producción
+                sameSite: 'strict',
+                maxAge: 3600000 // 1 hora
+            });
+        }
+        
         res.json({ role: user.role, token, credits: user.credits });
 
     } catch (error) {
@@ -273,8 +304,12 @@ app.post('/reject-purchase/:id', authenticateToken, authorizeAdmin, async (req, 
 const PRODUCTS_LIST = ['Aimbot Competitivo', 'Aimbot Personalizado', 'Paquete ESP Completo', 'Bypass APK'];
 
 function authenticateToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = req.cookies.token;
+    if (!token) {
+        const authHeader = req.headers['authorization'];
+        token = authHeader && authHeader.split(' ')[1];
+    }
+
     if (token == null) {
         return res.status(401).json({ message: 'Token no proporcionado. Acceso no autorizado.' });
     }
@@ -339,6 +374,15 @@ app.post('/send-license', authenticateToken, async (req, res) => {
 
     try {
         await client.query('BEGIN');
+
+        // Verificar créditos solo si el rol no es admin
+        if (req.user.role !== 'admin') {
+            const deducted = await deductCredits(senderId, 1);
+            if (deducted === 0) {
+                await client.query('ROLLBACK');
+                return res.status(403).json({ message: 'Créditos insuficientes.' });
+            }
+        }
 
         const productRes = await client.query("SELECT id FROM products WHERE name = $1", [product]);
         if (productRes.rows.length === 0) {

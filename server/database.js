@@ -207,6 +207,14 @@ async function resetUserHwid(userId) {
     return { changes: rowCount };
 }
 
+async function deductCredits(userId, amount) {
+    const { rowCount } = await query(
+        "UPDATE users SET credits = credits - $1 WHERE id = $2 AND credits >= $1",
+        [amount, userId]
+    );
+    return rowCount;
+}
+
 module.exports = {
     initializeDatabase,
     getDb: () => pool, // Aunque no se usa directamente, mantenemos la exportación por consistencia
@@ -222,5 +230,6 @@ module.exports = {
     addPurchaseToHistory,
     getPurchaseById,
     updatePurchaseStatus,
-    resetUserHwid
+    resetUserHwid,
+    deductCredits
 };
