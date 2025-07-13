@@ -97,22 +97,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Scroll Reveal Animations ---
-    // 1. Initialize the observer and store it in the global variable
     revealObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('visible');
-                revealObserver.unobserve(entry.target); // The observer unobserves itself
+                revealObserver.unobserve(entry.target);
             }
         });
     }, { threshold: 0.1 });
 
-    // 2. Observe all static elements that are already in the HTML
     document.querySelectorAll('.reveal').forEach(el => {
         revealObserver.observe(el);
     });
 
-    // 3. Load dynamic products (which will then be observed as they are added)
     loadProducts();
 
     // --- Buy Modal Logic ---
@@ -144,7 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const submitButton = buyForm.querySelector('button[type="submit"]');
         const formData = new FormData(buyForm);
 
-        // Añadir los nombres correctos que espera el backend
         formData.set('producto', document.getElementById('producto').value);
         formData.set('metodo', document.getElementById('payment-method').value);
         formData.set('correo', document.getElementById('email').value);
@@ -154,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
             submitButton.disabled = true;
             submitButton.textContent = 'Enviando...';
 
-            const response = await fetch('/submit-purchase', { // Ruta corregida
+            const response = await fetch('/submit-purchase', {
                 method: 'POST',
                 body: formData
             });
@@ -208,4 +204,78 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         instruccionesPago.innerHTML = html;
     };
+
+    // --- Login Modal Logic ---
+    const loginModal = document.getElementById('login-modal');
+    const loginBtn = document.getElementById('login-btn');
+    const closeLoginModalBtn = document.getElementById('close-login-modal');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+
+    const openLoginModal = () => {
+        loginModal.style.display = 'flex';
+    };
+
+    const closeLoginModal = () => {
+        loginModal.style.display = 'none';
+        loginError.style.display = 'none';
+        loginForm.reset();
+    };
+
+    loginBtn.addEventListener('click', openLoginModal);
+    closeLoginModalBtn.addEventListener('click', closeLoginModal);
+
+    // Generar un identificador de navegador como HWID
+    const getBrowserFingerprint = () => {
+        const props = [
+            navigator.userAgent,
+            navigator.language,
+            screen.width,
+            screen.height,
+            screen.colorDepth,
+            new Date().getTimezoneOffset()
+        ];
+        const propsString = props.join('');
+        
+        let hash = 0;
+        for (let i = 0; i < propsString.length; i++) {
+            const char = propsString.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash |= 0; // Convert to 32bit integer
+        }
+        return 'web-' + Math.abs(hash).toString(16);
+    };
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const username = loginForm.username.value;
+        const password = loginForm.password.value;
+        const hwid = getBrowserFingerprint();
+
+        try {
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password, hwid })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Error en el servidor');
+            }
+
+            if (result.role === 'admin' || result.role === 'seller') {
+                window.location.href = '/admin/admin.html';
+            } else {
+                closeLoginModal();
+            }
+
+        } catch (err) {
+            loginError.textContent = err.message;
+            loginError.style.display = 'block';
+        }
+    });
 });
