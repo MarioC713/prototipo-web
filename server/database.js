@@ -2,7 +2,9 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const bcrypt = require('bcrypt');
 
-const DB_PATH = path.join(__dirname, 'database.sqlite');
+// La ruta de la DB ahora es configurable. Usará la variable de entorno en producción
+// y un archivo local para el desarrollo.
+const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'database.sqlite');
 let db;
 
 function initializeDatabase(productsList = []) {
