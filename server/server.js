@@ -56,16 +56,23 @@ app.use(express.static(publicPath));
 const adminRouter = express.Router();
 adminRouter.use(authenticateToken, authorizeAdmin);
 
-adminRouter.get('/', (req, res) => {
+// Ruta principal para el HTML del admin
+adminRouter.get('/admin.html', (req, res) => {
     res.sendFile(path.resolve(__dirname, 'admin.html'));
 });
 
+// Servir assets del admin
 adminRouter.get('/admin.css', (req, res) => {
     res.sendFile(path.resolve(__dirname, 'admin.css'));
 });
 
 adminRouter.get('/admin.js', (req, res) => {
     res.sendFile(path.resolve(__dirname, 'admin.js'));
+});
+
+// La protección de HWID también debe servirse a través de una ruta autenticada si es necesaria en el panel
+adminRouter.get('/protection.js', (req, res) => {
+    res.sendFile(path.resolve(__dirname, '..', 'protection.js'));
 });
 
 app.use('/admin', adminRouter);
