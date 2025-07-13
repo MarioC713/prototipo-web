@@ -1,5 +1,4 @@
 // --- Configuración ---
-const API_URL = '';
 let PRODUCTS = [];
 
 // --- Funciones de Utilidad ---
@@ -118,7 +117,7 @@ async function fetchLicenseCounts() {
         'Bypass APK': 'fa-mobile-screen-button'
     };
     try {
-        const response = await authenticatedFetch(`${API_URL}/licenses-all`);
+        const response = await authenticatedFetch(`/licenses-all`);
         if (!response.ok) throw new Error('No se pudo obtener el inventario.');
         const allCounts = await response.json();
         const allowedProductNames = new Set(PRODUCTS.map(p => p.name));
@@ -177,7 +176,7 @@ async function checkPassword() {
     try {
         const hwid = generateHwid(); // Usar la nueva función local
 
-        const response = await fetch(`${API_URL}/login`, {
+        const response = await fetch(`/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password, hwid }),
@@ -224,7 +223,7 @@ async function authenticatedFetch(url, options = {}) {
 
 async function fetchProductsAndPopulateSelectors() {
     try {
-        const response = await authenticatedFetch(`${API_URL}/products`);
+        const response = await authenticatedFetch(`/products`);
         if (!response.ok) throw new Error('No se pudo obtener la lista de productos.');
         PRODUCTS = await response.json();
         productContainer.innerHTML = '';
@@ -248,7 +247,7 @@ async function handleSendLicenses(e) {
     try {
         const endpoint = products.length === 1 ? '/send-license' : '/send-multiple-licenses';
         const body = products.length === 1 ? { email, product: products[0] } : { email, products };
-        const response = await authenticatedFetch(`${API_URL}${endpoint}`, {
+        const response = await authenticatedFetch(`${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -295,7 +294,7 @@ function handleTabChange(e) {
 
 async function fetchHistory() {
     try {
-        const response = await authenticatedFetch(`${API_URL}/history`);
+        const response = await authenticatedFetch(`/history`);
         if (!response.ok) throw new Error('No se pudo obtener el historial.');
         const history = await response.json();
         historyTableBody.innerHTML = history.length === 0 ? '<tr><td colspan="5" style="text-align: center;">No hay registros.</td></tr>' : '';
@@ -318,7 +317,7 @@ async function fetchHistory() {
 
 async function loadPendingPurchases() {
     try {
-        const response = await authenticatedFetch(`${API_URL}/history?status=PENDING`);
+        const response = await authenticatedFetch(`/history?status=PENDING`);
         if (!response.ok) throw new Error('No se pudo obtener compras pendientes.');
         const purchases = await response.json();
         pendingPurchasesTableBody.innerHTML = purchases.length === 0 ? '<tr><td colspan="5" style="text-align: center;">No hay compras pendientes.</td></tr>' : '';
@@ -367,7 +366,7 @@ async function handleAddStock(e) {
     submitButton.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Añadiendo...`;
     
     try {
-        const response = await authenticatedFetch(`${API_URL}/add-licenses`, {
+        const response = await authenticatedFetch(`/add-licenses`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ product, licenses }),
@@ -392,7 +391,7 @@ function handleLogout() {
 
 async function fetchUsers() {
     try {
-        const response = await authenticatedFetch(`${API_URL}/users`);
+        const response = await authenticatedFetch(`/users`);
         if (!response.ok) throw new Error('No se pudo obtener usuarios.');
         const users = await response.json();
         usersTableBody.innerHTML = users.length === 0 ? '<tr><td colspan="6" style="text-align: center;">No hay usuarios.</td></tr>' : '';
@@ -452,7 +451,7 @@ async function handleAddUser(e) {
     submitButton.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Creando...`;
     
     try {
-        const response = await authenticatedFetch(`${API_URL}/users`, {
+        const response = await authenticatedFetch(`/users`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password, role, allowed_products }),
@@ -473,7 +472,7 @@ async function handleAddUser(e) {
 async function handleDeleteUser(userId) {
     if (!confirm('¿Seguro que desea eliminar este usuario?')) return;
     try {
-        const response = await authenticatedFetch(`${API_URL}/users/${userId}`, { method: 'DELETE' });
+        const response = await authenticatedFetch(`/users/${userId}`, { method: 'DELETE' });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
         addToLog(result.message, false);
@@ -486,7 +485,7 @@ async function handleDeleteUser(userId) {
 async function handleResetHwid(userId) {
     if (!confirm('¿Seguro que desea resetear el HWID de este usuario? Podrá iniciar sesión desde un nuevo equipo.')) return;
     try {
-        const response = await authenticatedFetch(`${API_URL}/users/${userId}/reset-hwid`, { method: 'POST' });
+        const response = await authenticatedFetch(`/users/${userId}/reset-hwid`, { method: 'POST' });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
         addToLog(result.message, false);
@@ -498,7 +497,7 @@ async function handleResetHwid(userId) {
 
 async function openEditUserModal(id) {
     try {
-        const usersResponse = await authenticatedFetch(`${API_URL}/users`);
+        const usersResponse = await authenticatedFetch(`/users`);
         const users = await usersResponse.json();
         const user = users.find(u => u.id == id);
         if (!user) throw new Error('Usuario no encontrado');
@@ -512,7 +511,7 @@ async function openEditUserModal(id) {
         editUserPermissionsContainer.style.display = user.role === 'seller' ? 'block' : 'none';
         await populatePermissionsCheckboxes(editUserProductList);
         if (user.role === 'seller') {
-            const permsResponse = await authenticatedFetch(`${API_URL}/users/${id}/permissions`);
+            const permsResponse = await authenticatedFetch(`/users/${id}/permissions`);
             const allowedProductIds = await permsResponse.json();
             editUserProductList.querySelectorAll('input').forEach(cb => {
                 cb.checked = allowedProductIds.includes(parseInt(cb.value));
@@ -545,7 +544,7 @@ async function handleEditUser(e) {
     try {
         const body = { username, role, credits, allowed_products };
         if (password) body.password = password;
-        const response = await authenticatedFetch(`${API_URL}/users/${id}`, {
+        const response = await authenticatedFetch(`/users/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -565,7 +564,7 @@ async function handleEditUser(e) {
 
 async function populatePermissionsCheckboxes(container) {
     try {
-        const response = await authenticatedFetch(`${API_URL}/products`);
+        const response = await authenticatedFetch(`/products`);
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: 'Error al leer la respuesta del servidor.' }));
             throw new Error(errorData.message || 'No se pudo obtener la lista de productos.');
@@ -591,7 +590,7 @@ async function populatePermissionsCheckboxes(container) {
 async function fetchAndDisplayProducts() {
     try {
         // Usar la ruta segura que devuelve todos los campos
-        const response = await authenticatedFetch(`${API_URL}/products`); 
+        const response = await authenticatedFetch(`/products`); 
         if (!response.ok) throw new Error('No se pudo obtener productos.');
         const products = await response.json();
         productsTableBody.innerHTML = products.length === 0 ? '<tr><td colspan="4" style="text-align: center;">No hay productos.</td></tr>' : '';
@@ -618,7 +617,7 @@ async function handleApprovePurchase(purchaseId) {
     if (!confirm(`¿Está seguro de que desea aprobar la compra ${purchaseId}? Se enviará la licencia al cliente.`)) return;
 
     try {
-        const response = await authenticatedFetch(`${API_URL}/approve-purchase/${purchaseId}`, { method: 'POST' });
+        const response = await authenticatedFetch(`/approve-purchase/${purchaseId}`, { method: 'POST' });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
 
@@ -635,7 +634,7 @@ async function handleRejectPurchase(purchaseId) {
     if (!confirm(`¿Está seguro de que desea rechazar la compra ${purchaseId}?`)) return;
 
     try {
-        const response = await authenticatedFetch(`${API_URL}/reject-purchase/${purchaseId}`, { method: 'POST' });
+        const response = await authenticatedFetch(`/reject-purchase/${purchaseId}`, { method: 'POST' });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
 
@@ -657,7 +656,7 @@ async function handleAddProduct(e) {
     if (!name) return addToLog('El nombre es obligatorio.', true);
 
     try {
-        const response = await authenticatedFetch(`${API_URL}/api/products`, {
+        const response = await authenticatedFetch(`/api/products`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, description, price, image_url: imageUrl, features: JSON.stringify(features) }),
@@ -676,7 +675,7 @@ async function handleAddProduct(e) {
 async function handleEditProduct(id) {
     try {
         // Usar la nueva ruta para obtener detalles de un producto específico
-        const response = await authenticatedFetch(`${API_URL}/api/products/${id}`);
+        const response = await authenticatedFetch(`/api/products/${id}`);
         if (!response.ok) throw new Error('No se pudo obtener los detalles del producto.');
         
         const product = await response.json();
@@ -721,7 +720,7 @@ async function handleUpdateProductForm(e) {
 
 async function updateProductRequest(id, name, description, price, imageUrl, features) {
     try {
-        const response = await authenticatedFetch(`${API_URL}/api/products/${id}`, {
+        const response = await authenticatedFetch(`/api/products/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, description, price, image_url: imageUrl, features: JSON.stringify(features) }),
@@ -740,7 +739,7 @@ async function updateProductRequest(id, name, description, price, imageUrl, feat
 async function handleDeleteProduct(id) {
     if (!confirm('¿Seguro que quieres eliminar este producto?')) return;
     try {
-        const response = await authenticatedFetch(`${API_URL}/api/products/${id}`, { method: 'DELETE' });
+        const response = await authenticatedFetch(`/api/products/${id}`, { method: 'DELETE' });
         const result = await response.json();
         if (!response.ok) throw new Error(result.message);
         addToLog(result.message, false);

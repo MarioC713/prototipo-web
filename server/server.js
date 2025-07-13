@@ -42,11 +42,11 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Servir archivos estáticos desde el directorio raíz del proyecto (un nivel arriba de 'server')
-const publicPath = path.join(__dirname, '..');
+const publicPath = path.resolve(__dirname, '..');
 app.use(express.static(publicPath));
 
 // Servir archivos específicos del panel de admin desde la carpeta 'server'
-app.use('/admin', express.static(path.join(__dirname)));
+app.use('/admin', express.static(path.resolve(__dirname)));
 
 // Ruta pública para obtener todos los productos
 app.get('/api/public-products', (req, res) => {
