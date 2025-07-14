@@ -4,8 +4,7 @@
   "description": "Servidor para enviar licencias por correo.",
   "main": "server.js",
   "scripts": {
-    "build": "node build.js",
-    "start": "node --max-old-space-size=4096 build.js && node server.js"
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
@@ -20,7 +19,6 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "form-data": "^4.0.3",
-    "javascript-obfuscator": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.1",
     "pg": "^8.12.0"
