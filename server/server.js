@@ -49,6 +49,11 @@ app.use(cookieParser());
 const publicPath = path.resolve(__dirname, '..');
 app.use(express.static(publicPath));
 
+// Ruta explícita para la página principal
+app.get('/', (req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+});
+
 // Servir archivos específicos del panel de admin desde la carpeta 'server'
 // app.use('/admin', express.static(path.resolve(__dirname))); // Eliminado por seguridad
 
