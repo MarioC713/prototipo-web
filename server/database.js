@@ -207,12 +207,19 @@ async function resetUserHwid(userId) {
     return { changes: rowCount };
 }
 
-async function deductCredits(userId, amount) {
-    const { rowCount } = await query(
-        "UPDATE users SET credits = credits - $1 WHERE id = $2 AND credits >= $1",
+async function deductCredits(userId, amount, client = null) {
+    const querier = client || pool;
+    const { rows, rowCount } = await querier.query(
+        "UPDATE users SET credits = credits - $1 WHERE id = $2 AND credits >= $1 RETURNING credits",
         [amount, userId]
     );
-    return rowCount;
+    if (rowCount > 0) {
+        return { success: true, newCredits: rows[0].credits };
+    } else {
+        const { rows: userRows } = await querier.query("SELECT credits FROM users WHERE id = $1", [userId]);
+        const currentCredits = userRows.length > 0 ? userRows[0].credits : 0;
+        return { success: false, newCredits: currentCredits };
+    }
 }
 
 module.exports = {

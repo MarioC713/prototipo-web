@@ -49,6 +49,11 @@ app.use(cookieParser());
 const publicPath = path.resolve(__dirname, '..');
 app.use(express.static(publicPath));
 
+// Ruta explícita para la página principal
+app.get('/', (req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+});
+
 // Servir archivos específicos del panel de admin desde la carpeta 'server'
 // app.use('/admin', express.static(path.resolve(__dirname))); // Eliminado por seguridad
 
@@ -390,13 +395,17 @@ app.post('/send-license', authenticateToken, async (req, res) => {
 
     try {
         await client.query('BEGIN');
+        let creditsResult = { success: true, newCredits: null };
 
-        // Verificar créditos solo si el rol no es admin
+        console.log(`User role: ${req.user.role}`);
         if (req.user.role !== 'admin') {
-            const deducted = await deductCredits(senderId, 1);
-            if (deducted === 0) {
+            console.log(`Deducting 1 credit from user ${senderId}`);
+            creditsResult = await deductCredits(senderId, 1, client);
+            console.log(`Deduct credits result:`, creditsResult);
+            if (!creditsResult.success) {
                 await client.query('ROLLBACK');
-                return res.status(403).json({ message: 'Créditos insuficientes.' });
+                console.log('ROLLBACK due to insufficient credits.');
+                return res.status(403).json({ message: 'Créditos insuficientes.', credits: creditsResult.newCredits });
             }
         }
 
@@ -418,14 +427,19 @@ app.post('/send-license', authenticateToken, async (req, res) => {
         await client.query("INSERT INTO history (date, email, product_name, license_key, sender_id, status) VALUES (NOW(), $1, $2, $3, $4, 'APPROVED')", [email, product, licenseRow.key, senderId]);
 
         await client.query('COMMIT');
+        console.log('COMMIT successful for single license send.');
 
         const template = getEmailTemplate(product);
         await sgMail.send({ to: email, from: fromEmail, subject: template.subject, html: template.html(licenseRow.key, product) });
 
-        res.status(200).json({ message: `Licencia para ${product} enviada.` });
+        const response = { message: `Licencia para ${product} enviada.` };
+        if (req.user.role !== 'admin') {
+            response.credits = creditsResult.newCredits;
+        }
+        res.status(200).json(response);
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Error sending license:', error);
+        console.error('Error sending license, ROLLBACK executed:', error);
         res.status(500).json({ message: 'Error al enviar licencia.' });
     } finally {
         client.release();
@@ -444,13 +458,21 @@ app.post('/send-multiple-licenses', authenticateToken, async (req, res) => {
 
     try {
         await client.query('BEGIN');
+        let creditsResult = { success: true, newCredits: null };
 
+        console.log(`User role: ${req.user.role}`);
         if (req.user.role !== 'admin') {
             const creditsToDeduct = products.length;
-            const deducted = await deductCredits(senderId, creditsToDeduct);
-            if (deducted === 0) {
+            console.log(`Deducting ${creditsToDeduct} credits from user ${senderId}`);
+            creditsResult = await deductCredits(senderId, creditsToDeduct, client);
+            console.log(`Deduct credits result:`, creditsResult);
+            if (!creditsResult.success) {
                 await client.query('ROLLBACK');
-                return res.status(403).json({ message: `Créditos insuficientes. Se requieren ${creditsToDeduct} créditos.` });
+                console.log('ROLLBACK due to insufficient credits.');
+                return res.status(403).json({ 
+                    message: `Créditos insuficientes. Se requieren ${creditsToDeduct} créditos.`,
+                    credits: creditsResult.newCredits 
+                });
             }
         }
 
@@ -471,7 +493,6 @@ app.post('/send-multiple-licenses', authenticateToken, async (req, res) => {
             await client.query("UPDATE licenses SET is_used = TRUE, used_at = NOW(), used_by_email = $1 WHERE id = $2", [email, licenseRow.id]);
             sentLicenses[productName] = licenseRow.key;
             
-            // Enviar correo por cada licencia
             const template = getEmailTemplate(productName);
             await sgMail.send({ to: email, from: fromEmail, subject: template.subject, html: template.html(licenseRow.key, productName) });
         }
@@ -481,18 +502,18 @@ app.post('/send-multiple-licenses', authenticateToken, async (req, res) => {
             [email, 'Múltiples Productos', null, senderId, JSON.stringify(sentLicenses)]
         );
         
-        const user = await getUserByUsername(req.user.username);
-
         await client.query('COMMIT');
+        console.log('COMMIT successful for multiple licenses send.');
 
-        res.status(200).json({ 
-            message: `${products.length} licencias enviadas con éxito.`,
-            credits: user.credits // Devolver los créditos actualizados
-        });
+        const response = { message: `${products.length} licencias enviadas con éxito.` };
+        if (req.user.role !== 'admin') {
+            response.credits = creditsResult.newCredits;
+        }
+        res.status(200).json(response);
 
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Error sending multiple licenses:', error);
+        console.error('Error sending multiple licenses, ROLLBACK executed:', error);
         res.status(500).json({ message: error.message || 'Error al enviar licencias.' });
     } finally {
         client.release();
