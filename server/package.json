@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "build": "node build.js",
-    "start": "node build.js && node server.js"
+    "start": "node --max-old-space-size=4096 build.js && node server.js"
   },
   "keywords": [],
   "author": "",
